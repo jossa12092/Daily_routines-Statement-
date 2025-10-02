@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Present Simple Presenter + Coach · Editor principal con feedback en vivo</title>
+<style>
+  :root{
+    --bg:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --accent:#22d3ee; --accent2:#a78bfa;
+    --good:#34d399; --bad:#f87171; --warn:#fbbf24; --panel:#0b1227; --outline:#1f2a49; --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; background: radial-gradient(1000px 600px at 10% 10%, #0b1227 20%, #0f172a 60%, #0b1227 100%); color:var(--text); font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial}
+  header{display:flex; align-items:center; gap:12px; padding:14px 18px; background:#0b1227aa; backdrop-filter: blur(8px); position:sticky; top:0; z-index:10; box-shadow:var(--shadow)}
+  header h1{font-size:18px; margin:0; font-weight:700}
+  header .tag{font-size:12px; color:var(--muted)}
+  main{display:grid; grid-template-columns: 320px 1fr; gap:16px; padding:16px; height:calc(100vh - 64px)}
+  aside{background: linear-gradient(180deg, #0b1227, #0e1631); border:1px solid var(--outline); border-radius:16px; padding:12px; overflow:auto; box-shadow:var(--shadow)}
+  .section{border:1px solid #1d2844; border-radius:14px; margin:10px 0; padding:12px; background:#0b132a}
+  .section h3{margin:0 0 8px 0; font-size:14px; color:#dbeafe}
+  .row{display:flex; gap:8px; flex-wrap:wrap}
+  button, .chip{background:#0f1b3a; color:#e2e8f0; border:1px solid #243354; padding:8px 10px; border-radius:10px; cursor:pointer; transition:.2s}
+  button:hover, .chip:hover{transform:translateY(-1px); border-color:#36558a}
+  button.primary{background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#0b1024; border:none; font-weight:700}
+  button.ghost{background:transparent}
+  .pill{font-size:12px; padding:4px 8px; border-radius:15px; border:1px dashed #2b3a63; color:#cbd5e1}
+  input[type="text"]{width:100%; background:#0a1328; color:#e5e7eb; border:1px solid #223158; border-radius:12px; padding:10px; outline:none}
+  input:focus{border-color:#3b82f6; box-shadow:0 0 0 3px #3b82f644}
+  .hint{font-size:12px; color:var(--muted)}
+
+  /* Workspace */
+  .workspace{background: radial-gradient(circle at 70% 20%, #0b142c 0%, #0b1024 40%, #0a0f22 100%); border:1px solid var(--outline); border-radius:16px; box-shadow:var(--shadow); padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0}
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .badge{border:1px solid #25325e; padding:6px 8px; border-radius:999px; font-size:12px; color:#cbd5e1}
+  .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background:#0c1a36; border:1px solid #26335c; padding:2px 6px; border-radius:6px; font-size:12px}
+
+  /* Editor principal */
+  .editor-wrap{position:relative; border:1px solid #1d2844; background:#0a0e1f; border-radius:12px; min-height:360px; padding:16px; overflow:auto}
+  #mainEditor{min-height:320px; outline:none; white-space:pre-wrap}
+  #mainEditor[contenteditable="true"]:empty:before{content:attr(data-placeholder); color:#64748b}
+  /* Overlay de anotaciones inline */
+  #okHints{position:absolute; inset:0; pointer-events:none; z-index:20}
+  #inlineHints{position:absolute; inset:0; pointer-events:none; z-index:30}
+  .ih-badge{position:absolute; transform:none; font-size:12px; padding:6px 8px; border-radius:8px; border:1px solid #243354; background:#0f1b3a; color:#e2e8f0; box-shadow:var(--shadow); pointer-events:auto; max-width:min(70ch, 80%)}
+  .ih-good{border-color:#064e3b; color:#34d399; background:#052e2a}
+  .ih-warn{border-color:#7c2d12; color:#fbbf24; background:#2b1a0f}
+  .ih-bad{ border-color:#7f1d1d; color:#f87171; background:#2b0f13}
+  .ih-badge button{all:unset; cursor:pointer; padding-left:8px; text-decoration:underline}
+  .ih-eg{display:block; font-size:11px; color:#cbd5e1; opacity:.95; margin-top:4px}
+  /* OK marker (check) */
+  .ih-ok{position:absolute; font-size:11px; line-height:1; padding:1px 4px; border-radius:999px; background:#052e2a; color:#34d399; border:1px solid #064e3b; opacity:.85; pointer-events:none}
+
+  /* Barra de calificación */
+  .gradebar{display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:10px}
+  .gradebar .score{font-weight:700}
+  .gradebar .meter{flex:1; height:10px; border-radius:999px; background:#0b1227; border:1px solid #1d2844; overflow:hidden}
+  .gradebar .meter > span{display:block; height:100%; background:linear-gradient(90deg, #f87171, #fbbf24, #34d399)}
+
+  /* Slide */
+  canvas{background:#0a0e1f; border:1px solid #1d2844; border-radius:12px; display:block; width:100%; height:auto; aspect-ratio:16/9}
+
+  /* Coach */
+  .coach{border:1px solid #1d2844; border-radius:14px; padding:12px; background:#0b132a; box-shadow:var(--shadow); margin-top:10px}
+  .coach h3{margin:0 0 8px 0; font-size:14px; color:#86efac}
+
+  /* Tests */
+  .test-pass{color:#34d399}
+  .test-fail{color:#f87171}
+
+  .toast{position:fixed; right:16px; bottom:16px; padding:12px 14px; background:#111827; border:1px solid #374151; border-radius:12px; box-shadow:var(--shadow); opacity:0; transform:translateY(10px); transition:.25s}
+  .toast.show{opacity:1; transform:translateY(0)}
+</style>
+</head>
+<body>
+  <header>
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 3h8l6 6v12a0 0 0 0 1 0 0H5a0 0 0 0 1 0 0V3z" stroke="#22d3ee" stroke-width="1.4"/>
+      <path d="M13 3v6h6" stroke="#a78bfa" stroke-width="1.4"/>
+    </svg>
+    <h1>Present Simple Presenter + Coach</h1>
+    <span class="tag">Feedback en vivo en el mismo editor</span>
+  </header>
+  <main>
+    <aside>
+      <div class="section">
+        <h3>1) Metadatos</h3>
+        <label>Título</label>
+        <input type="text" id="titleInput" placeholder="My Daily Routine" maxlength="80" />
+        <p class="hint">Escribe en el editor grande a la derecha. El sistema bloquea pegar contenido.</p>
+      </div>
+      <div class="section">
+        <h3>2) Asistente: sugerencias rápidas</h3>
+        <div class="row"><span class="pill">Adverbios de frecuencia</span></div>
+        <div class="row" id="adverbChips"></div>
+        <div class="row" style="margin-top:6px"><span class="pill">Conectores</span></div>
+        <div class="row" id="connectorChips" style="margin-bottom:8px"></div>
+        <div class="section" style="background:#09122a">
+          <h3 style="margin-bottom:6px">Verbos comunes (Presente Simple)</h3>
+          <div class="row" id="verbChips"></div>
+        </div>
+      </div>
+      <div class="section">
+        <h3>3) Acciones</h3>
+        <div class="row">
+          <button id="runChecks" class="primary">Analizar texto</button>
+          <button id="renderSlide">Renderizar</button>
+          <button id="downloadPNG" class="ghost">Descargar PNG</button>
+        </div>
+        <div id="checks" style="margin-top:8px; display:grid; gap:6px"></div>
+        <p class="hint">Mínimos: ≥15 oraciones · ≥5 adverbios · ≥6 conectores. La exportación se habilita cuando cumples los mínimos.</p>
+      </div>
+      <div class="section" id="tests">
+        <h3>4) Pruebas</h3>
+        <div class="row"><button id="runTests" class="ghost">Run tests</button><span id="testsSummary" class="badge">—</span></div>
+        <div id="testsOutput" class="hint"></div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div class="toolbar">
+        <span class="badge" id="statusUsage">0 adverbios · 0 conectores</span>
+        <span class="badge" id="statusTense">Tiempos: —</span>
+        <span class="badge" id="statusTyping">Escritura humana: —</span>
+        <span class="badge" id="statusCount">Oraciones: 0/15</span>
+      </div>
+
+      <div id="pane-editor" class="pane active">
+        <div class="editor-wrap" id="editorWrap">
+          <div id="mainEditor" class="editor" contenteditable="true" spellcheck="false" data-placeholder="Escribe aquí tu descripción de rutina diaria usando FIRST, NEXT, THEN… y adverbios ALWAYS–NEVER."></div>
+          <div id="okHints"></div>
+          <div id="inlineHints"></div>
+        </div>
+        <div class="gradebar">
+          <div class="score">Nota: <span id="gradeValue">1.0</span>/5.0</div>
+          <div class="meter"><span id="gradeMeter" style="width:0%"></span></div>
+          <div class="badge" id="gateMsg">Pendiente mínimos</div>
+        </div>
+        <div class="coach" id="miniCoach">
+          <h3>Resumen del profesor</h3>
+          <div id="coachSummary"></div>
+        </div>
+      </div>
+
+      <div id="pane-slide" class="pane" style="display:none">
+        <canvas id="stage" width="1280" height="720"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+// ========= Datos base =========
+const ADVERBS=["never","rarely","sometime","often","usually","always"]; // lista original
+const CONNECTORS=["first","next","before","also","then","after","because","finally"];
+const VERBS=["wake up","have","eat","drink","study","work","play","go","take","watch","read","cook","clean","listen","call","text","check","review","walk","run"];
+const IRREGULAR={ 'went':'go','did':'do','had':'have','was':'am','were':'are','saw':'see','took':'take','made':'make','came':'come','gave':'give','found':'find','thought':'think','looked':'look','wanted':'want','used':'use','worked':'work','called':'call','tried':'try','asked':'ask','needed':'need','felt':'feel','left':'leave','put':'put','helped':'help','talked':'talk','wrote':'write','ran':'run','ate':'eat','drank':'drink','slept':'sleep','studied':'study','played':'play','walked':'walk','watched':'watch' };
+
+// ========= Utilidades =========
+const $=s=>document.querySelector(s); const $$=s=>Array.from(document.querySelectorAll(s));
+function toast(msg){const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500)}
+function capitalize(s){return s.charAt(0).toUpperCase()+s.slice(1)}
+function lowerFirst(s){return s? s.charAt(0).toLowerCase()+s.slice(1):s}
+function ensurePeriod(s){s=s.trim(); return /[.!?]$/.test(s)? s : s + '.'}
+function debounce(fn,ms){let t; return (...a)=>{clearTimeout(t); t=setTimeout(()=>fn(...a),ms)}}
+
+// ========= Bloqueo de pegado =========
+function blockPasteLike(){ const el=$('#mainEditor'); ['paste','drop','contextmenu'].forEach(evt=> el.addEventListener(evt,e=>{ e.preventDefault(); toast(evt==='contextmenu'? 'Clic derecho deshabilitado.':'Pegar/soltar bloqueado.'); })); window.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ e.preventDefault(); toast('Pegar deshabilitado.'); } }); }
+
+// ========= Chips =========
+function renderChips(){ const advW=$('#adverbChips'); ADVERBS.forEach(a=>{ const b=document.createElement('button'); b.className='chip'; b.textContent=a; b.onclick=()=>insertAtCursorEditor(` ${a} `); advW.appendChild(b)}); const conW=$('#connectorChips'); CONNECTORS.forEach(c=>{ const b=document.createElement('button'); b.className='chip'; b.textContent=c; b.onclick=()=>insertAtCursorEditor(`${capitalize(c)}, `); conW.appendChild(b)}); const vW=$('#verbChips'); VERBS.forEach(v=>{ const b=document.createElement('button'); b.className='chip'; b.textContent=v; b.onclick=()=>insertAtCursorEditor(` ${v} `); vW.appendChild(b)}); }
+function insertAtCursorEditor(text){ const ed=$('#mainEditor'); ed.focus(); const sel=window.getSelection(); const range=sel && sel.rangeCount? sel.getRangeAt(0):null; const node=document.createTextNode(text); if(range){ range.deleteContents(); range.insertNode(node); range.setStartAfter(node); range.setEndAfter(node); sel.removeAllRanges(); sel.addRange(range); } else { ed.appendChild(node); } onEditorChange(); }
+
+// ========= Texto del editor =========
+function getEditorText(){ return ($('#mainEditor').innerText||'').replace(/\u00A0/g,' ').trim(); }
+function setEditorText(s){ $('#mainEditor').innerText=s; onEditorChange(); }
+
+// ========= Analizadores =========
+function splitSentences(text){ const s=text.replace(/[!?]/g,'.'); return s.split('.').map(x=>x.trim()).filter(x=>x.length); }
+function detectTenseIssues(s){ const lower=s.toLowerCase(); let errs=[]; if(/\b(was|were|did|had|went|saw|took|made|came|gave|found|thought|looked|wanted|used|worked|called|tried|asked|needed|felt|left|put|wrote|ran|ate|drank|slept|studied|played|walked|watched)\b/.test(lower)) errs.push('pasado'); if(/\bwill\b|\bgoing to\b/.test(lower)) errs.push('futuro'); if(/\b(am|are|is)\s+\w+ing\b/i.test(lower)) errs.push('progresivo'); return errs; }
+function suggestRewritePresent(s){ let t=(' '+s.trim().toLowerCase()+' '); for(const [past,base] of Object.entries(IRREGULAR)){ t=t.replace(new RegExp('\\b'+past+'\\b','g'), base);} t=t.replace(/\bwill\b|\bgoing to\b/g,''); t=t.replace(/\b(am|are|is)\s+(\w+?)ing\b/g,(m,a,root)=>root); t=t.trim(); if(!t) return s; return capitalize(t); }
+function thirdPersonFix(verb){ const map={have:'has',do:'does',go:'goes'}; if(map[verb]) return map[verb]; if(/[^aeiou]y$/.test(verb)) return verb.slice(0,-1)+'ies'; if(/(s|sh|ch|x|z)$/.test(verb)) return verb+'es'; if(/s$/.test(verb)) return verb; return verb+'s'; }
+function detectAgreementIssue(s){
+  const m=/^\s*(He|She|It)\s+([a-z]+)\b/i.exec(s);
+  if(m){ const verb=m[2].toLowerCase(); if(!/(has|does|goes|[a-z]+s)\b/.test(s.split(/\s+/).slice(1,3).join(' '))){ return {type:'3sg-missing-s', fix: s.replace(new RegExp(m[2],'i'), thirdPersonFix(verb))}; }
+  }
+  const m2=/^\s*(I|You|We|They)\s+([a-z]+s)\b/i.exec(s);
+  if(m2){ return {type:'non3sg-with-s', fix: s.replace(new RegExp(m2[2],'i'), m2[2].slice(0,-1))}; }
+  return null;
+}
+function hasConnectorAtStart(s){ return CONNECTORS.some(c=> new RegExp('^'+c+'\\b','i').test(s)); }
+function hasAdverb(s){ return ADVERBS.some(a=> new RegExp('\\b'+a+'\\b','i').test(s)); }
+function nextConnectorAdvice(text){ const used=CONNECTORS.filter(c=> new RegExp('\\b'+c+'\\b','i').test(text)); const order=['first','next','then','after','because','also','before','finally']; for(const c of order){ if(!used.includes(c)) return c; } return 'then'; }
+
+// ========= Cohesión & coherencia =========
+function cohesionScore(sentences){ let score=0, total=Math.max(1,sentences.length-1); for(let i=1;i<sentences.length;i++){ if(hasConnectorAtStart(sentences[i])) score++; } return score/total; }
+
+// ========= Evaluación por oración con EJEMPLOS =========
+function exampleConnector(s){ const nx=capitalize(nextConnectorAdvice(getEditorText())); const base=lowerFirst(s.trim()); return ensurePeriod(`${nx}, ${base}`); }
+function exampleAdverb(s){ const adv='usually'; const m=/^(I|You|We|They|He|She|It)\s+(.*)$/i.exec(s.trim()); if(m){ return ensurePeriod(`${m[1]} ${adv} ${m[2]}`); } return ensurePeriod(`${capitalize(adv)}, ${lowerFirst(s.trim())}`); }
+function exampleCapital(s){ return ensurePeriod(capitalize(s.trim())); }
+function examplePeriod(s){ return ensurePeriod(s); }
+
+function evaluateSentence(s, idx, allCount){
+  const trim=s.trim();
+  const tenseIssues = detectTenseIssues(trim);
+  const sva = detectAgreementIssue(trim);
+  const needsPeriod = !/[.!?]$/.test(trim);
+  const needsCapital = !/^[A-Z]/.test(trim);
+  const missingConn = (!hasConnectorAtStart(trim) && idx>0);
+  const missingAdv = !hasAdverb(trim);
+  const issues=[];
+  if(tenseIssues.includes('pasado')||tenseIssues.includes('futuro')) issues.push('Usa Presente Simple');
+  if(tenseIssues.includes('progresivo')) issues.push('Evita -ing si es hábito');
+  if(sva) issues.push('Concordancia: he/she/it → verbo con -s');
+  if(needsCapital) issues.push('Capitaliza la primera letra');
+  if(needsPeriod) issues.push('Agrega punto final');
+  if(missingConn) issues.push('Añade un conector al inicio');
+  if(missingAdv) issues.push('Inserta un adverbio de frecuencia');
+  const severity = (tenseIssues.length||sva)? 'bad' : (issues.length? 'warn':'good');
+  // Elegir el mejor ejemplo prioritario
+  let best=null;
+  if(needsPeriod) best = examplePeriod(trim);
+  else if(needsCapital) best = exampleCapital(trim);
+  else if(sva) best = ensurePeriod(sva.fix);
+  else if(tenseIssues.length) best = suggestRewritePresent(trim);
+  else if(missingConn) best = exampleConnector(trim);
+  else if(missingAdv) best = exampleAdverb(trim);
+  const title = issues.length===1? `Revisa: ${issues[0]}` : (issues.length? 'Revisa estas correcciones' : 'Bien');
+  return {severity, issues, msg:title, fix:best||null, example: best||null};
+}
+
+// ========= Overlay inline =========
+function clearInlineHints(){ const el=$('#inlineHints'); if(el) el.innerHTML=''; }
+function clearOkHints(){ const el=$('#okHints'); if(el) el.innerHTML=''; }
+function findNodeForOffset(root, offset){ let stack=[...root.childNodes], acc=0; if(stack.length===0) return {node:root, offset:0}; let node; while((node=stack.shift())){ if(node.nodeType===Node.TEXT_NODE){ const len=node.nodeValue.length; if(acc+len>=offset) return {node, offset: offset-acc}; acc+=len; } else { stack=[...node.childNodes, ...stack]; } } return {node:root, offset: root.childNodes.length}; }
+function placeBadgeAtOffset(root, offset, cls, html, example, idx, fix){
+  const range=document.createRange();
+  const pt=findNodeForOffset(root, Math.max(0, offset));
+  try{ range.setStart(pt.node, Math.max(0, pt.offset)); range.setEnd(pt.node, Math.max(0, pt.offset)); }catch(_){ return; }
+  const caretRect=range.getBoundingClientRect();
+  const containerRect=document.getElementById('editorWrap').getBoundingClientRect();
+  const overlay=document.getElementById('inlineHints');
+  const b=document.createElement('div'); b.className='ih-badge '+cls; b.innerHTML = html;
+  if(fix){ const btn=document.createElement('button'); btn.textContent=' · Aplicar'; btn.onclick=(e)=>{ e.preventDefault(); e.stopPropagation(); applySentenceFixAtIndex(idx, fix); }; b.appendChild(btn); }
+  overlay.appendChild(b);
+  const pad=8; const bRect=b.getBoundingClientRect();
+  const x0 = caretRect.right - containerRect.left; const y0 = caretRect.bottom - containerRect.top;
+  let left = x0 + pad; let top = y0 + pad; // por defecto: abajo
+  const spaceBelow = containerRect.bottom - caretRect.bottom;
+  const spaceAbove = caretRect.top - containerRect.top;
+  if(spaceBelow < bRect.height + pad && spaceAbove >= bRect.height + pad){
+    top = (caretRect.top - containerRect.top) - bRect.height - pad; // arriba
+  }
+  left = Math.min(left, (containerRect.width - pad) - bRect.width);
+  left = Math.max(left, pad);
+  top = Math.max(top, pad);
+  top = Math.min(top, (containerRect.height - pad) - bRect.height);
+  b.style.left = left + 'px';
+  b.style.top = top + 'px';
+}
+function placeOkMarkerAtOffset(root, offset){
+  const range=document.createRange();
+  const pt=findNodeForOffset(root, Math.max(0, offset));
+  try{ range.setStart(pt.node, Math.max(0, pt.offset)); range.setEnd(pt.node, Math.max(0, pt.offset)); }catch(_){ return; }
+  const caretRect=range.getBoundingClientRect();
+  const containerRect=document.getElementById('editorWrap').getBoundingClientRect();
+  const overlay=document.getElementById('okHints');
+  const m=document.createElement('div'); m.className='ih-ok'; m.textContent='✓'; overlay.appendChild(m);
+  const pad=4; let left = caretRect.right - containerRect.left + pad; let top = caretRect.top - containerRect.top - 14;
+  if(top < pad){ top = caretRect.bottom - containerRect.top + 2; }
+  left = Math.min(Math.max(left, pad), (containerRect.width - pad) - 14);
+  top  = Math.min(Math.max(top, pad), (containerRect.height - pad) - 14);
+  m.style.left = left + 'px'; m.style.top = top + 'px';
+}
+function annotateEditor(){
+  clearInlineHints();
+  clearOkHints();
+  const root=$('#mainEditor');
+  const text=getEditorText();
+  const sents=splitSentences(text);
+  let offset=0;
+  for(let i=0;i<sents.length;i++){
+    const s=sents[i];
+    const start=offset; const end=start + s.length;
+    const ev=evaluateSentence(s,i,sents.length);
+    if(ev.severity==='good'){ placeOkMarkerAtOffset(root, end); offset = end + 1; continue; }
+    const cls = ev.severity==='warn'?'ih-warn':'ih-bad';
+    const icon = ev.severity==='warn'?'⚠️ ':'❌ ';
+    let html = `<strong>${icon}${ev.msg}</strong>`;
+    if(ev.issues.length>1){ html += `<ul style="margin:6px 0;padding-left:18px">${ev.issues.map(it=>`<li>${it}</li>`).join('')}</ul>`; }
+    if(ev.example){ html += `<span class="ih-eg">Ejemplo corregido: “${ev.example}”</span>`; }
+    placeBadgeAtOffset(root, end, cls, html, null, i, ev.fix);
+    offset = end + 1;
+  }
+}
+
+// ========= Corrección por índice =========
+function applySentenceFixAtIndex(idx, fix){ const sents=splitSentences(getEditorText()); sents[idx]=fix; const joined=(sents.map(x=>x.trim()).filter(Boolean).join('. ')+'.').replace('..','.'); setEditorText(joined); toast('Corrección aplicada'); }
+
+// ========= Métricas globales, gating y nota =========
+function countUsage(text){ const low=text.toLowerCase(); const advCount=ADVERBS.reduce((a,b)=>a+((low.match(new RegExp(`\\b${b}\\b`,'g')))||[]).length,0); const connCount=CONNECTORS.reduce((a,b)=>a+((low.match(new RegExp(`\\b${b}\\b`,'g')))||[]).length,0); $('#statusUsage').textContent=`${advCount} adverbios · ${connCount} conectores`; return {advCount, connCount}; }
+function computeGrade(text){ const sents=splitSentences(text); const {advCount,connCount}=countUsage(text); const coh=cohesionScore(sents); const qty = Math.min(1, sents.length/15); const tensePen = sents.reduce((p,s)=> p + (detectTenseIssues(s).length?1:0), 0); const tenseScore = Math.max(0, 1 - tensePen/Math.max(1,sents.length)); const gramPen = sents.reduce((p,s)=>{ const g=grammarChecks(s); return p + (g.issues.length>0? 1:0); },0); const gramScore = Math.max(0, 1 - gramPen/Math.max(1,sents.length)); const advScore = Math.min(1, advCount/5); const connScore= Math.min(1, connCount/6); const cohScore = coh; const total = 0.20*qty + 0.25*tenseScore + 0.20*gramScore + 0.15*advScore + 0.15*connScore + 0.05*cohScore; const grade = +(1.0 + total*4).toFixed(1); return {grade,total,qty,tenseScore,gramScore,advCount,connCount,cohScore,sentences:sents.length}; }
+function grammarChecks(s){ const issues=[]; if(!/^[A-Z]/.test(s.trim())) issues.push('capitaliza la primera letra'); if(!/[.]$/.test(s.trim())) issues.push('agrega punto final'); const words=s.trim().split(/\s+/).length; if(words>30) issues.push('oración muy larga (divide ideas)'); const sva=detectAgreementIssue(s); if(sva) issues.push(sva.type==='3sg-missing-s'? 'falta -s en 3ª persona':'verbo con -s después de I/You/We/They'); return {issues, sva:detectAgreementIssue(s)}; }
+function updateGradeBar(info){
+  const gate = (info.sentences>=15 && info.advCount>=5 && info.connCount>=6);
+  const gradeToShow = gate ? info.grade : 1.0;
+  const meterPct = gate ? (info.total*100) : 0;
+  document.getElementById('gradeValue').textContent = gradeToShow.toFixed(1);
+  document.getElementById('gradeMeter').style.width = meterPct + '%';
+  document.getElementById('statusCount').textContent = `Oraciones: ${info.sentences}/15`;
+  const msg = gate ? 'Mínimos OK' : 'Faltan mínimos';
+  document.getElementById('gateMsg').textContent = msg;
+  document.getElementById('renderSlide').disabled = !gate;
+  document.getElementById('downloadPNG').disabled = !gate;
+  return gate;
+}
+
+// ========= Resumen del profesor =========
+function updateCoachSummary(text){ const sents=splitSentences(text); const problems=[]; sents.forEach((s,i)=>{ const ev=evaluateSentence(s,i,sents.length); if(ev.severity!=='good'){ const ex= ev.example? ` – Ej.: “${ev.example}”` : ''; problems.push(`• (${i+1}) ${ev.msg}${ex}`); } }); $('#coachSummary').innerHTML = problems.length? problems.join('<br>') : '¡Muy bien! Todas las oraciones están en Presente Simple y con buena forma.'; }
+
+// ========= Checks (panel lateral) =========
+function badge(kind,text){ const map={ ok:'style="border-color:#064e3b;color:#34d399;background:#052e2a"', bad:'style="border-color:#7f1d1d;color:#f87171;background:#2b0f13"', warn:'style="border-color:#7c2d12;color:#fbbf24;background:#2b1a0f"'}; return `<span class="badge" ${map[kind]||''}>${text}</span>` }
+function sectionRow(title,html){ const w=document.createElement('div'); w.className='section'; w.innerHTML=`<h3>${title}</h3><div class="row">${html}</div>`; return w; }
+function aiHeuristic(text){ const sents=text.split(/[.!?]+\s*/).filter(Boolean); const words=text.trim().split(/\s+/).filter(Boolean); const avgLen=sents.length?(words.length/sents.length):words.length; const clichés=/(as an ai|in conclusion|overall,|furthermore|moreover)/i.test(text); const manySemicolons=(text.match(/;/g)||[]).length>4; const manyLongWords=(words.filter(w=>w.length>=10).length>(words.length*0.12)); let score=0; if(avgLen>22) score+=20; if(clichés) score+=30; if(manySemicolons) score+=10; if(manyLongWords) score+=10; const label = score>=60? 'Probable IA' : (score>=30? 'Mixto/Neutro':'Probable humano'); const color = score>=60? 'bad' : (score>=30? 'warn':'ok'); return {score,label,color,avgLen}; }
+function runChecks(){ const txt=getEditorText(); const out=$('#checks'); out.innerHTML=''; if(!txt){ out.innerHTML='<span class="hint">Escribe en el editor.</span>'; return; } const ai=aiHeuristic(txt); out.appendChild(sectionRow('Antiplagio/IA (heurístico)', `${badge(ai.color, `${ai.label} · score ${ai.score}`)} <span class=hint>(avgSent≈${ai.avgLen.toFixed(1)})</span>`)); const counts=countUsage(txt); out.appendChild(sectionRow('Adverbios y conectores', `${badge(counts.advCount>=5?'ok':'warn', `${counts.advCount}/5 adverbios`)} ${badge(counts.connCount>=6?'ok':'warn', `${counts.connCount}/6 conectores`)}`)); }
+
+// ========= Canvas =========
+const stage=document.getElementById('stage'); const ctx= stage? stage.getContext('2d'):null;
+function renderCanvas(){ if(!ctx) return; const title=$('#titleInput').value.trim()||'My Daily Routine'; const script=getEditorText(); const g=ctx.createLinearGradient(0,0,0,stage.height); g.addColorStop(0,'#0b1024'); g.addColorStop(.5,'#111b3d'); g.addColorStop(1,'#0a0f22'); ctx.fillStyle=g; ctx.fillRect(0,0,stage.width,stage.height); sparkle(); ctx.font='bold 44px Inter, system-ui, Segoe UI, Roboto'; ctx.fillStyle='#e5e7eb'; ctx.fillText(title,56,90); ctx.font='16px Inter, system-ui'; ctx.fillStyle='#a5b4fc'; ctx.fillText('Present Simple · Adverbs & Connectors',56,120); const box={x:56,y:160,w:stage.width-112,h:stage.height-220}; drawRoundedRect(box.x-16,box.y-16,box.w+32,box.h+32,20,'#0b142f','#1b2b56'); const bulletLines=toBulleted(script); drawTextBox(bulletLines,box.x,box.y,box.w,28); ctx.font='12px Inter, system-ui'; ctx.fillStyle='#94a3b8'; ctx.fillText('Tip: usa first/next/then/after/because/finally y adverbios never–always.',56,stage.height-24); }
+function sparkle(){ for(let i=0;i<60;i++){ const x=Math.random()*stage.width,y=Math.random()*stage.height; const r=Math.random()*1.8; ctx.fillStyle='rgba(167,139,250,.15)'; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); } }
+function drawRoundedRect(x,y,w,h,r,fill,stroke){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=stroke; ctx.lineWidth=1; ctx.stroke(); }
+function toBulleted(text){ if(!text) return ['(Escribe en el editor)']; const normalized=text.replace(/[!?]/g,'.'); return normalized.split('.').map(s=>s.trim()).filter(Boolean).map(s=>'• '+s); }
+function drawTextBox(lines,x,y,w,lh){ ctx.font='18px Inter, system-ui'; ctx.fillStyle='#dbeafe'; let cy=y; for(const ln of lines){ drawParagraph(ln,x,cy,w,lh); const width=ctx.measureText(ln).width; cy+=lh*(Math.ceil(width/w)+1); } }
+function drawParagraph(text,x,y,w,lh){ const words=text.split(' '); let line=''; let cy=y; for(let n=0;n<words.length;n++){ const test=line+words[n]+" "; const metrics=ctx.measureText(test); if(metrics.width>w && n>0){ ctx.fillText(line,x,cy); line=words[n]+" "; cy+=lh; } else { line=test; } } ctx.fillText(line,x,cy); }
+function downloadPNG(){ renderCanvas(); const url=stage.toDataURL('image/png'); const a=document.createElement('a'); a.href=url; a.download='present-simple-slide.png'; a.click(); }
+
+// ========= Eventos & ciclo principal =========
+const onEditorChange = debounce(()=>{
+  const text=getEditorText();
+  annotateEditor();
+  const info=computeGrade(text);
+  updateGradeBar(info);
+  updateCoachSummary(text);
+  const tenseProblems = splitSentences(text).some(s=> detectTenseIssues(s).length>0);
+  $('#statusTense').textContent='Tiempos: '+(tenseProblems? 'Problemas':'OK');
+  countUsage(text);
+}, 120);
+window.addEventListener('resize', debounce(annotateEditor, 150));
+$('#editorWrap').addEventListener('scroll', debounce(annotateEditor, 50));
+$('#mainEditor').addEventListener('keyup', (e)=>{ if(e.key==='.'||e.key==='Enter'||e.key===' '){ annotateEditor(); }});
+
+// ========= Tests =========
+function runTests(){
+  const out=$('#testsOutput'); const sum=$('#testsSummary'); const results=[];
+  function test(name,fn){ try{ const ok=fn(); results.push({name,ok}); } catch(err){ results.push({name,ok:false,err}); } }
+  // Core
+  test('toBulleted: split', ()=>{ const b=toBulleted('First. Next! Finally?'); return b.length===3 && b[0].startsWith('• First'); });
+  test('detectTenseIssues: past', ()=> detectTenseIssues('I went home.').includes('pasado'));
+  test('detectTenseIssues: future', ()=> detectTenseIssues('I will study.').includes('futuro'));
+  test('grammarChecks: 3sg -s missing', ()=>{ const g=grammarChecks('He go to school.'); return g.issues.some(x=>x.includes('3ª persona')); });
+  test('computeGrade: range 1.0–5.0', ()=>{ const g=computeGrade('First, I study. Then, I play. Also, I read. After, I cook. Finally, I sleep.').grade; return g>=1.0 && g<=5.0; });
+  test('gating: requires 15 sentences', ()=>{ const info=computeGrade('First, I study. '.repeat(5)); const gated=updateGradeBar(info); return gated===false; });
+  test('grade UI baseline before gating is 1.0', ()=>{ const info=computeGrade('First, I study. '.repeat(5)); updateGradeBar(info); return document.getElementById('gradeValue').textContent.trim()==='1.0'; });
+  test('badge example: period', ()=>{ const ev=evaluateSentence('I study',1,2); return ev.example && /\.$/.test(ev.example); });
+  test('hasConnectorAtStart: detects at sentence start', ()=> hasConnectorAtStart('Then, I go to school.'));
+  test('regex safety: building connector regex does not throw', ()=>{ try{ CONNECTORS.forEach(c=> new RegExp('^'+c+'\\b','i')); return true; }catch(e){ return false; } });
+  // layout related
+  test('inline badge flips when near top', ()=>{ const host={top:100,right:500,left:100}; const dummy=document.createElement('div'); dummy.className='ih-badge'; dummy.style.left='120px'; dummy.style.top='102px'; document.getElementById('inlineHints').appendChild(dummy); const rectBefore=dummy.getBoundingClientRect(); if(rectBefore.top <= host.top + 8){ dummy.style.transform='translate(6px, 6px)'; } const flipped = dummy.style.transform.includes('6px, 6px'); dummy.remove(); return flipped; });
+  test('positioning: prefers below if there is space', ()=>{ const caret={top:200,bottom:220,right:300}; const container={top:100,bottom:600,left:100,width:600,height:500}; const size={width:200,height:60}; const pos=(function(){ const pad=8; let left=(caret.right-container.left)+pad; let top=(caret.bottom-container.top)+pad; const spaceBelow=container.bottom-caret.bottom; const spaceAbove=caret.top-container.top; if(spaceBelow < size.height+pad && spaceAbove>=size.height+pad){ top=(caret.top-container.top)-size.height-pad; } left=Math.min(left,(container.width-pad)-size.width); left=Math.max(left,pad); top=Math.max(top,pad); top=Math.min(top,(container.height-pad)-size.height); return {left,top,below:((container.bottom-caret.bottom)>=size.height+pad)}; })(); return pos.below; });
+  test('positioning: flips above when no space below', ()=>{ const caret={top:560,bottom:575,right:500}; const container={top:100,bottom:620,left:100,width:600,height:520}; const size={width:240,height:80}; const pad=8; const spaceBelow=container.bottom-caret.bottom; const flips=(spaceBelow < size.height+pad); return flips; });
+  // behavior: labels disappear when sentence fixed
+  test('badges disappear after fixing a sentence', ()=>{ const ed=document.getElementById('mainEditor'); const overlay=document.getElementById('inlineHints'); ed.innerText='I study'; annotateEditor(); const before=overlay.children.length; ed.innerText='I study.'; annotateEditor(); const after=overlay.children.length; return before>0 && after===0; });
+  // check marker for good sentence
+  test('ok marker is shown for a correct sentence', ()=>{ const ed=document.getElementById('mainEditor'); const ok=document.getElementById('okHints'); ed.innerText='I study.'; annotateEditor(); return ok.children.length>0; });
+  // NEW: helpers return correct types
+  test('badge() returns HTML string', ()=>{ const s=badge('ok','Hi'); return typeof s==='string' && s.includes('class="badge"'); });
+  test('sectionRow() returns element', ()=>{ const el=sectionRow('T','X'); return el && el.nodeType===1 && el.className==='section'; });
+  const passed=results.filter(r=>r.ok).length; sum.textContent=`${passed}/${results.length} tests passed`;
+  out.innerHTML=results.map(r=>`<div class="${r.ok?'test-pass':'test-fail'}">${r.ok?'✓':'✗'} ${r.name}${r.err? ' – '+(r.err.message||r.err):''}</div>`).join('');
+}
+
+// ========= Init =========
+function init(){
+  renderChips();
+  blockPasteLike();
+  $('#runChecks').onclick=runChecks;
+  $('#renderSlide').onclick=()=>{ renderCanvas(); toast('Renderizado ✓'); };
+  $('#downloadPNG').onclick=downloadPNG;
+  $('#runTests').onclick=runTests;
+  $('#mainEditor').addEventListener('input', onEditorChange);
+  setEditorText('First, I wake up at 6:00 a.m. Next, I usually have breakfast. Then, I take the bus to campus because it is fast. After classes, I do my homework. Before dinner, I review my notes. I also play the guitar. Finally, I go to sleep.');
+  onEditorChange();
+}
+init();
+
+// Captura y muestra errores JS
+window.addEventListener('error', e=>{ const t=$('#toast'); if(t){ t.textContent='Error: '+(e.message||'JavaScript'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),4000); }});
+</script>
+</body>
+</html>
